@@ -1,0 +1,32 @@
+# Visual Studio
+.vs/
+Debug/
+Release/
+x64/
+x86/
+*.user
+*.suo
+*.ncb
+*.sdf
+*.opensdf
+*.db
+*.opendb
+*.ipch
+
+# Build outputs
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.log
+*.tlog
+*.idb
+*.lastbuildstate
+*.manifest
+*.res
+*.cache
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
