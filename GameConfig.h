@@ -28,17 +28,17 @@ namespace Config
     constexpr int MAGE_AGI = 10;
 
     // 궁수 기본 스탯
-    constexpr int ARCHER_HP = 90;
-    constexpr int ARCHER_MP = 50;
-    constexpr int ARCHER_ATK = 12;
-    constexpr int ARCHER_DEF = 7;
-    constexpr int ARCHER_AGI = 15;
+    constexpr int ARCHER_HP = 100;
+    constexpr int ARCHER_MP = 60;
+    constexpr int ARCHER_ATK = 14;
+    constexpr int ARCHER_DEF = 8;
+    constexpr int ARCHER_AGI = 18;
 
     // --- 전투 ---
     constexpr double DAMAGE_MIN_MULTIPLIER = 0.8;   // 최소 데미지 배율
     constexpr double DAMAGE_MAX_MULTIPLIER = 1.2;   // 최대 데미지 배율
     constexpr double CRIT_RATE_PER_AGI = 0.02;      // 민첩 1당 크리티컬 확률 (2%)
-    constexpr double MAX_CRIT_RATE = 0.30;           // 최대 크리티컬 확률 (30%)
+    constexpr double MAX_CRIT_RATE = 0.50;           // 최대 크리티컬 확률 (50%)
     constexpr double CRIT_DAMAGE_MULTIPLIER = 1.5;   // 크리티컬 데미지 배율
     constexpr double ESCAPE_BASE_RATE = 0.5;         // 기본 도망 확률 (50%)
     constexpr double ESCAPE_AGI_BONUS = 0.02;        // 민첩 1당 도망 확률 보너스
@@ -70,6 +70,7 @@ namespace Config
     constexpr int SMALL_POTION_PRICE = 20;
     constexpr int LARGE_POTION_PRICE = 50;
     constexpr int MP_POTION_PRICE = 30;
+    constexpr int LARGE_MP_POTION_PRICE = 70;
 
     // --- 골드 ---
     constexpr int STARTING_GOLD = 100;               // 시작 골드
