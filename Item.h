@@ -26,15 +26,17 @@ protected:
 class Potion : public Item
 {
 public:
-    Potion(std::string name, int price, int hpRestore, int mpRestore);
+    Potion(std::string name, int price, int hpRestore, int mpRestore, bool clearsStatus = false);
 
     std::string getDescription() const override;
     int getHpRestore() const;
     int getMpRestore() const;
+    bool getClearsStatus() const;
 
 private:
     int hpRestore;
     int mpRestore;
+    bool clearsStatus;
 };
 
 class Equipment : public Item
@@ -46,9 +48,19 @@ public:
     int getAtkBonus() const;
     int getDefBonus() const;
 
+    // 저주 관련
+    bool isCursed() const;
+    CursePenalty getCursePenalty() const;
+    int getCursePenaltyValue() const;           // HpPercent/MpPercent면 %, Agility면 절대값
+    std::string getCurseDescription() const;    // 한국어 설명 ("최대 HP -15%" 등)
+    void setCurse(CursePenalty penalty, int value);
+
 private:
     int atkBonus;
     int defBonus;
+    bool cursed = false;
+    CursePenalty cursePenalty = CursePenalty::HpPercent;
+    int cursePenaltyValue = 0;
 };
 
 namespace ItemFactory
@@ -60,6 +72,9 @@ namespace ItemFactory
 
     std::unique_ptr<Item> createWeaponForJob(JobType job, int tier);
     std::unique_ptr<Item> createArmorForJob(JobType job, int tier);
+
+    std::unique_ptr<Item> createCursedWeaponForJob(JobType job, int tier);
+    std::unique_ptr<Item> createCursedArmorForJob(JobType job, int tier);
 
     std::unique_ptr<Item> randomTreasure(JobType playerJob, int floor);
 }

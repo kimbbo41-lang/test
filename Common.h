@@ -60,6 +60,31 @@ enum class CombatAction
     Escape      // 도망
 };
 
+// 상태이상 유형
+enum class StatusEffect
+{
+    None,       // 없음
+    Poison,     // 독 (최대 HP 비율 데미지)
+    Burn,       // 화상 (고정 데미지, 방어 무시)
+    Stun        // 기절 (다음 턴 행동 불가)
+};
+
+// 상태이상 인스턴스
+struct StatusInstance
+{
+    StatusEffect type = StatusEffect::None;
+    int remainingTurns = 0;
+    int magnitude = 0;      // Burn: 턴당 고정 데미지, Poison: 최대 HP 비율(%), Stun: 미사용
+};
+
+// 저주 페널티 유형
+enum class CursePenalty
+{
+    HpPercent,      // 최대 HP 감소
+    MpPercent,      // 최대 MP 감소
+    Agility         // 민첩 감소
+};
+
 // 캐릭터 기본 스탯 구조체
 struct Stats
 {

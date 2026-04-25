@@ -43,7 +43,7 @@ bool Game::startNewGame()
 
     UI::printLine("\n[직업 선택]", UI::Color::Cyan);
     UI::printLine("  1. 전사 (HP 120, 공격 15, 방어 12)", UI::Color::White);
-    UI::printLine("  2. 마법사 (HP 70, MP 100, 공격 8, 마법 강력)", UI::Color::White);
+    UI::printLine("  2. 마법사 (HP 80, MP 110, 공격 10, 마법 강력)", UI::Color::White);
     UI::printLine("  3. 궁수 (HP 90, 민첩 15, 크리티컬 유리)", UI::Color::White);
 
     int jobChoice = UI::askChoice("선택", 1, 3);
@@ -170,6 +170,11 @@ void Game::showInventoryMenu()
             player->restoreMp(potion->getMpRestore());
             UI::printLine("MP " + std::to_string(potion->getMpRestore()) + " 회복!",
                 UI::Color::Cyan);
+        }
+        if (potion->getClearsStatus())
+        {
+            player->clearStatuses();
+            UI::printLine("모든 상태이상이 해제되었습니다!", UI::Color::Green);
         }
         inventory->removeItem(choice - 1);
         UI::pause();

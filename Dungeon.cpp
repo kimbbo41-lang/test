@@ -25,11 +25,27 @@ void Dungeon::generateFloor()
     floorRooms.clear();
     int roomCount = randomInt(Config::MIN_ROOMS_PER_FLOOR, Config::MAX_ROOMS_PER_FLOOR);
 
+    EventType prev = EventType::Monster;    // 초기값 (첫 방은 제약 없음)
     for (int i = 0; i < roomCount; ++i)
     {
+        EventType ev = rollEvent();
+        // 제약: (1) 상점 연속 금지, (2) 1층에서는 휴식처 금지
+        int attempts = 0;
+        auto disallowed = [&](EventType e)
+        {
+            if (e == EventType::Shop && prev == EventType::Shop) return true;
+            if (e == EventType::Rest && currentFloor == 1) return true;
+            return false;
+        };
+        while (disallowed(ev) && attempts < 5)
+        {
+            ev = rollEvent();
+            ++attempts;
+        }
         Room r;
-        r.event = rollEvent();
+        r.event = ev;
         floorRooms.push_back(r);
+        prev = ev;
     }
 
     Room boss;
@@ -68,8 +84,16 @@ bool Dungeon::enterNextRoom(Character& player, Inventory& inventory)
         }
         ++currentFloor;
         generateFloor();
+
+        // 보스 처치 보상: 새 층 진입 시 HP/MP 완전 회복 + 상태이상 해제
+        player.heal(player.getStats().maxHp);
+        player.restoreMp(player.getStats().maxMp);
+        player.clearStatuses();
+
         UI::clear();
         UI::printTitle(std::to_string(currentFloor) + "층에 도착했습니다!");
+        UI::printLine("보스 처치 보상: HP/MP가 모두 회복되고 상태이상이 해제되었습니다.",
+            UI::Color::Green);
         UI::pause();
     }
 
@@ -115,15 +139,28 @@ bool Dungeon::enterNextRoom(Character& player, Inventory& inventory)
 
 bool Dungeon::handleMonster(Character& player, Inventory& inventory, bool boss)
 {
-    Monster monster = boss
-        ? MonsterFactory::createBoss(currentFloor)
-        : MonsterFactory::createForFloor(currentFloor);
+    auto makeMonster = [&]() -> Monster
+    {
+        if (boss) return MonsterFactory::createBoss(currentFloor);
+        if (currentFloor >= Config::ELITE_APPEAR_FLOOR &&
+            randomInt(1, 100) <= Config::ELITE_CHANCE_PERCENT)
+        {
+            return MonsterFactory::createEliteForFloor(currentFloor);
+        }
+        return MonsterFactory::createForFloor(currentFloor);
+    };
 
+    Monster monster = makeMonster();
+
+    if (monster.isElite())
+    {
+        UI::printLine(">>> 엘리트 몬스터 등장! <<<", UI::Color::Magenta);
+    }
     UI::printLine(monster.getName() + "과(와)의 전투가 시작된다!",
-        boss ? UI::Color::Red : UI::Color::Yellow);
+        (boss || monster.isElite()) ? UI::Color::Red : UI::Color::Yellow);
     UI::pause();
 
-    CombatEngine engine(player, monster, inventory);
+    CombatEngine engine(player, monster, inventory, currentFloor);
     CombatResult result = engine.run();
 
     switch (result)
@@ -136,6 +173,28 @@ bool Dungeon::handleMonster(Character& player, Inventory& inventory, bool boss)
         player.gainGold(goldR);
         UI::printLine("\n승리! 경험치 " + std::to_string(expR) +
             ", 골드 " + std::to_string(goldR) + " 획득.", UI::Color::Green);
+
+        if (monster.isElite())
+        {
+            int tier = std::clamp((currentFloor + 1) / 2, 1, 3);
+            auto drop = (randomInt(0, 1) == 0)
+                ? ItemFactory::createWeaponForJob(player.getJob(), tier)
+                : ItemFactory::createArmorForJob(player.getJob(), tier);
+
+            UI::printLine("엘리트 처치 보상: " + drop->getName() + " 획득!",
+                UI::Color::Magenta);
+
+            if (inventory.isFull())
+            {
+                UI::printLine("인벤토리가 가득 차서 바닥에 떨어뜨렸습니다.", UI::Color::Red);
+            }
+            else
+            {
+                inventory.addItem(std::move(drop));
+                UI::printLine("인벤토리에 추가되었습니다.", UI::Color::Green);
+            }
+        }
+
         UI::pause();
         return true;
     }
@@ -183,6 +242,14 @@ void Dungeon::handleTrap(Character& player)
     if (!player.isAlive())
     {
         UI::printLine("함정에 의해 쓰러졌다...", UI::Color::Red);
+        return;
+    }
+
+    // 일부 함정은 독을 남긴다
+    if (randomInt(1, 100) <= Config::TRAP_POISON_CHANCE_PERCENT)
+    {
+        player.applyStatus(StatusEffect::Poison, Config::POISON_DURATION, Config::POISON_HP_PERCENT);
+        UI::printLine("독이 퍼지기 시작했다... (다음 전투에서 독 상태로 시작)", UI::Color::Magenta);
     }
 }
 
@@ -202,7 +269,7 @@ void Dungeon::handleShop(Character& player, Inventory& inventory)
 
         UI::printLine("[판매 물품]", UI::Color::Cyan);
         std::cout << "  1. 작은 체력 물약 (HP+40) - " << Config::SMALL_POTION_PRICE << "G\n";
-        std::cout << "  2. 큰 체력 물약 (HP+100) - " << Config::LARGE_POTION_PRICE << "G\n";
+        std::cout << "  2. 큰 체력 물약 (HP+100, 상태이상 해제) - " << Config::LARGE_POTION_PRICE << "G\n";
         std::cout << "  3. 마나 물약 (MP+50) - " << Config::MP_POTION_PRICE << "G\n";
         std::cout << "  4. 큰 마나 물약 (MP+120) - " << Config::LARGE_MP_POTION_PRICE << "G\n";
 

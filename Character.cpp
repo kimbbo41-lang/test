@@ -80,6 +80,12 @@ void Character::takeDamage(int damage)
     stats.hp = std::max(0, stats.hp - damage);
 }
 
+void Character::takeTrueDamage(int damage)
+{
+    if (damage < 0) damage = 0;
+    stats.hp = std::max(0, stats.hp - damage);
+}
+
 void Character::heal(int amount)
 {
     stats.hp = std::min(stats.maxHp, stats.hp + amount);
@@ -133,10 +139,53 @@ void Character::levelUpIfReady()
     if (level >= Config::MAX_LEVEL) exp = 0;
 }
 
+void Character::refreshCurseDeltas()
+{
+    // 1. 이전에 차감했던 값을 먼저 복원
+    stats.maxHp  += cursedHpDelta;
+    stats.maxMp  += cursedMpDelta;
+    stats.agility += cursedAgiDelta;
+    cursedHpDelta = 0;
+    cursedMpDelta = 0;
+    cursedAgiDelta = 0;
+
+    // 2. 현재 장착 중인 저주 장비들에서 페널티 재계산 (복원된 최대치 기준)
+    auto accumulate = [&](const Equipment* eq)
+    {
+        if (!eq || !eq->isCursed()) return;
+        int v = eq->getCursePenaltyValue();
+        switch (eq->getCursePenalty())
+        {
+        case CursePenalty::HpPercent:
+            cursedHpDelta += stats.maxHp * v / 100;
+            break;
+        case CursePenalty::MpPercent:
+            cursedMpDelta += stats.maxMp * v / 100;
+            break;
+        case CursePenalty::Agility:
+            cursedAgiDelta += v;
+            break;
+        }
+    };
+    accumulate(weapon.get());
+    accumulate(armor.get());
+
+    stats.maxHp  -= cursedHpDelta;
+    stats.maxMp  -= cursedMpDelta;
+    stats.agility -= cursedAgiDelta;
+
+    if (stats.maxHp < 1) stats.maxHp = 1;
+    if (stats.maxMp < 0) stats.maxMp = 0;
+    if (stats.agility < 1) stats.agility = 1;
+    if (stats.hp > stats.maxHp) stats.hp = stats.maxHp;
+    if (stats.mp > stats.maxMp) stats.mp = stats.maxMp;
+}
+
 std::unique_ptr<Equipment> Character::equipWeapon(std::unique_ptr<Equipment> newWeapon)
 {
     auto old = std::move(weapon);
     weapon = std::move(newWeapon);
+    refreshCurseDeltas();
     return old;
 }
 
@@ -144,11 +193,81 @@ std::unique_ptr<Equipment> Character::equipArmor(std::unique_ptr<Equipment> newA
 {
     auto old = std::move(armor);
     armor = std::move(newArmor);
+    refreshCurseDeltas();
     return old;
 }
 
 const Equipment* Character::getWeapon() const { return weapon.get(); }
 const Equipment* Character::getArmor() const { return armor.get(); }
+
+void Character::applyStatus(StatusEffect effect, int duration, int magnitude)
+{
+    if (effect == StatusEffect::None || duration <= 0) return;
+    for (auto& s : statuses)
+    {
+        if (s.type == effect)
+        {
+            s.remainingTurns = std::max(s.remainingTurns, duration);
+            s.magnitude = std::max(s.magnitude, magnitude);
+            return;
+        }
+    }
+    statuses.push_back({ effect, duration, magnitude });
+}
+
+bool Character::hasStatus(StatusEffect effect) const
+{
+    for (const auto& s : statuses)
+        if (s.type == effect && s.remainingTurns > 0) return true;
+    return false;
+}
+
+bool Character::isStunned() const
+{
+    return hasStatus(StatusEffect::Stun);
+}
+
+std::string Character::tickStatus(int currentFloor)
+{
+    std::string log;
+    for (auto& s : statuses)
+    {
+        if (s.remainingTurns <= 0) continue;
+
+        if (s.type == StatusEffect::Poison)
+        {
+            int dmg = std::max(1, stats.maxHp * s.magnitude / 100);
+            takeTrueDamage(dmg);
+            if (!log.empty()) log += " ";
+            log += name + "은(는) 독으로 " + std::to_string(dmg) + " 데미지!";
+        }
+        else if (s.type == StatusEffect::Burn)
+        {
+            int dmg = std::max(1, s.magnitude);
+            takeTrueDamage(dmg);
+            if (!log.empty()) log += " ";
+            log += name + "은(는) 화상으로 " + std::to_string(dmg) + " 데미지!";
+        }
+
+        --s.remainingTurns;
+    }
+    (void)currentFloor;
+    statuses.erase(
+        std::remove_if(statuses.begin(), statuses.end(),
+            [](const StatusInstance& s) { return s.remainingTurns <= 0; }),
+        statuses.end());
+    return log;
+}
+
+void Character::clearStatuses()
+{
+    statuses.clear();
+}
+
+const std::vector<StatusInstance>& Character::getStatuses() const
+{
+    return statuses;
+}
 
 void Character::rest()
 {
@@ -174,7 +293,37 @@ void Character::printStatus() const
     std::cout << "민첩: " << stats.agility << "\n";
     std::cout << "경험치: " << exp << "/" << getExpToNextLevel() << "\n";
     std::cout << "골드: " << gold << "G\n";
-    if (weapon) std::cout << "무기: " << weapon->getName() << "\n";
-    if (armor)  std::cout << "방어구: " << armor->getName() << "\n";
+    if (weapon)
+    {
+        std::cout << "무기: " << weapon->getName();
+        if (weapon->isCursed()) std::cout << " [저주: " << weapon->getCurseDescription() << "]";
+        std::cout << "\n";
+    }
+    if (armor)
+    {
+        std::cout << "방어구: " << armor->getName();
+        if (armor->isCursed()) std::cout << " [저주: " << armor->getCurseDescription() << "]";
+        std::cout << "\n";
+    }
+    if (!statuses.empty())
+    {
+        std::cout << "상태: ";
+        bool first = true;
+        for (const auto& s : statuses)
+        {
+            if (s.remainingTurns <= 0) continue;
+            if (!first) std::cout << ", ";
+            first = false;
+            switch (s.type)
+            {
+            case StatusEffect::Poison: std::cout << "독"; break;
+            case StatusEffect::Burn:   std::cout << "화상"; break;
+            case StatusEffect::Stun:   std::cout << "기절"; break;
+            default: break;
+            }
+            std::cout << "(" << s.remainingTurns << "턴)";
+        }
+        std::cout << "\n";
+    }
     UI::printDivider();
 }

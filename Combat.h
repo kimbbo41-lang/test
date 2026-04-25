@@ -9,7 +9,7 @@ class Inventory;
 class CombatEngine
 {
 public:
-    CombatEngine(Character& player, Monster& monster, Inventory& inventory);
+    CombatEngine(Character& player, Monster& monster, Inventory& inventory, int currentFloor);
 
     CombatResult run();
 
@@ -17,6 +17,7 @@ private:
     Character& player;
     Monster& monster;
     Inventory& inventory;
+    int currentFloor;
 
     bool playerTurn();
     void monsterTurn();
@@ -29,4 +30,7 @@ private:
     bool doEscape();
 
     int rollDamage(int attack, int defense, int attackerAgi, bool& isCrit);
+
+    // 엘리트/보스가 공격 후 플레이어에게 무작위 상태이상 시도
+    void tryInflictStatusOnPlayer();
 };

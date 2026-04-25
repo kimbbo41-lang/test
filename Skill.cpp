@@ -29,14 +29,14 @@ namespace SkillLibrary
             };
         case JobType::Mage:
             return {
-                Skill("파이어볼",   SkillType::Magic, 10, 2.0, "화염구 (마법 200%)"),
+                Skill("파이어볼",   SkillType::Magic,  8, 2.0, "화염구 (마법 200%)"),
                 Skill("아이스 스톰", SkillType::Magic, 20, 2.8, "얼음 폭풍 (마법 280%)"),
-                Skill("치유의 빛", SkillType::Heal,  15, 0.4, "HP 40% 회복")
+                Skill("치유의 빛", SkillType::Heal,  12, 0.4, "HP 40% 회복")
             };
         case JobType::Archer:
             return {
                 Skill("정밀사격",   SkillType::Physical, 8,  2.2, "약점 사격 (물리 220%)"),
-                Skill("연속사격",   SkillType::Physical, 20, 3.0, "3연발 (물리 300%)"),
+                Skill("연속사격",   SkillType::Physical, 20, 2.6, "3연발 (물리 260%)"),
                 Skill("응급처치", SkillType::Heal,   10, 0.30, "HP 30% 회복")
             };
         }

@@ -8,8 +8,8 @@
 #include <algorithm>
 #include <iostream>
 
-CombatEngine::CombatEngine(Character& player, Monster& monster, Inventory& inventory)
-    : player(player), monster(monster), inventory(inventory)
+CombatEngine::CombatEngine(Character& player, Monster& monster, Inventory& inventory, int currentFloor)
+    : player(player), monster(monster), inventory(inventory), currentFloor(currentFloor)
 {
 }
 
@@ -22,29 +22,66 @@ CombatResult CombatEngine::run()
     {
         showCombatStatus();
 
-        bool turnEnded = false;
-        while (!turnEnded)
+        // --- 플레이어 턴 ---
+        if (player.isStunned())
         {
-            UI::printLine("\n[행동 선택] 1.공격  2.스킬  3.아이템  4.도망", UI::Color::Yellow);
-            int choice = UI::askChoice("선택", 1, 4);
-            switch (choice)
+            UI::printLine(player.getName() + "은(는) 기절하여 움직일 수 없다!", UI::Color::Yellow);
+        }
+        else
+        {
+            bool turnEnded = false;
+            while (!turnEnded)
             {
-            case 1: doAttack(); turnEnded = true; break;
-            case 2: turnEnded = doSkill(); break;
-            case 3: turnEnded = doItem(); break;
-            case 4:
-                if (doEscape()) return CombatResult::Escape;
-                turnEnded = true;
-                break;
+                UI::printLine("\n[행동 선택] 1.공격  2.스킬  3.아이템  4.도망", UI::Color::Yellow);
+                int choice = UI::askChoice("선택", 1, 4);
+                switch (choice)
+                {
+                case 1: doAttack(); turnEnded = true; break;
+                case 2: turnEnded = doSkill(); break;
+                case 3: turnEnded = doItem(); break;
+                case 4:
+                    if (doEscape())
+                    {
+                        player.clearStatuses();
+                        return CombatResult::Escape;
+                    }
+                    turnEnded = true;
+                    break;
+                }
             }
         }
 
+        // 플레이어 턴 종료: 상태이상 tick
+        {
+            std::string log = player.tickStatus(currentFloor);
+            if (!log.empty()) UI::printLine(log, UI::Color::Red);
+        }
+        if (!player.isAlive()) break;
         if (!monster.isAlive()) break;
 
-        monsterTurn();
+        // --- 몬스터 턴 ---
+        if (monster.isStunned())
+        {
+            UI::printLine(monster.getName() + "은(는) 기절하여 움직일 수 없다!", UI::Color::Yellow);
+        }
+        else
+        {
+            monsterTurn();
+        }
+
+        // 몬스터 턴 종료: 상태이상 tick
+        {
+            std::string log = monster.tickStatus(currentFloor);
+            if (!log.empty()) UI::printLine(log, UI::Color::Red);
+        }
     }
 
-    if (!player.isAlive()) return CombatResult::Defeat;
+    if (!player.isAlive())
+    {
+        player.clearStatuses();
+        return CombatResult::Defeat;
+    }
+    // 승리 시에는 상태이상 유지 (이미 턴 진행으로 자연 소멸이 일반적)
     return CombatResult::Victory;
 }
 
@@ -59,6 +96,32 @@ void CombatEngine::showCombatStatus() const
     UI::printColored("[" + monster.getName() + "] ", UI::Color::Red);
     UI::printHpMpBar(monster.getStats().hp, monster.getStats().maxHp, "HP", UI::Color::Red);
     std::cout << "\n";
+
+    // 상태이상 표시
+    auto printStatuses = [](const std::string& who, const std::vector<StatusInstance>& list)
+    {
+        bool any = false;
+        for (const auto& s : list) if (s.remainingTurns > 0) { any = true; break; }
+        if (!any) return;
+        std::cout << "  " << who << " 상태: ";
+        bool first = true;
+        for (const auto& s : list)
+        {
+            if (s.remainingTurns <= 0) continue;
+            if (!first) std::cout << ", ";
+            first = false;
+            switch (s.type)
+            {
+            case StatusEffect::Poison: std::cout << "독"; break;
+            case StatusEffect::Burn:   std::cout << "화상"; break;
+            case StatusEffect::Stun:   std::cout << "기절"; break;
+            default: break;
+            }
+            std::cout << "(" << s.remainingTurns << ")";
+        }
+        std::cout << "\n";
+    };
+    printStatuses(player.getName(), player.getStatuses());
     UI::printDivider();
 }
 
@@ -177,6 +240,11 @@ bool CombatEngine::doItem()
         UI::printLine("MP " + std::to_string(potion->getMpRestore()) + " 회복!",
             UI::Color::Cyan);
     }
+    if (potion->getClearsStatus())
+    {
+        player.clearStatuses();
+        UI::printLine("모든 상태이상이 해제되었습니다!", UI::Color::Green);
+    }
     inventory.removeItem(choice - 1);
     return true;
 }
@@ -215,4 +283,35 @@ void CombatEngine::monsterTurn()
         "은(는) " + std::to_string(dmg) + " 데미지를 입었다.";
     if (crit) msg = "크리티컬! " + msg;
     UI::printLine(msg, crit ? UI::Color::Yellow : UI::Color::Red);
+
+    // 엘리트/보스는 공격 시 무작위 상태이상 시도
+    if ((monster.isElite() || monster.isBoss()) && player.isAlive())
+    {
+        tryInflictStatusOnPlayer();
+    }
+}
+
+void CombatEngine::tryInflictStatusOnPlayer()
+{
+    if (randomInt(1, 100) > Config::ELITE_STATUS_PROC_PERCENT) return;
+
+    int pick = randomInt(1, 3);
+    switch (pick)
+    {
+    case 1:
+        player.applyStatus(StatusEffect::Poison, Config::POISON_DURATION, Config::POISON_HP_PERCENT);
+        UI::printLine(player.getName() + "은(는) 독에 중독되었다!", UI::Color::Magenta);
+        break;
+    case 2:
+    {
+        int burnDmg = currentFloor * Config::BURN_DAMAGE_PER_FLOOR;
+        player.applyStatus(StatusEffect::Burn, Config::BURN_DURATION, burnDmg);
+        UI::printLine(player.getName() + "은(는) 화상을 입었다!", UI::Color::Red);
+        break;
+    }
+    case 3:
+        player.applyStatus(StatusEffect::Stun, Config::STUN_DURATION, 0);
+        UI::printLine(player.getName() + "은(는) 기절했다!", UI::Color::Yellow);
+        break;
+    }
 }
