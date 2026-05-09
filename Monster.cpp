@@ -4,13 +4,16 @@
 #include <algorithm>
 #include <array>
 
-Monster::Monster(std::string name, Stats stats, int expReward, int goldReward, bool isBoss, bool isElite)
+Monster::Monster(std::string name, Stats stats, int expReward, int goldReward,
+                 bool isBoss, bool isElite, int bossFloor)
     : name(std::move(name))
     , stats(stats)
     , expReward(expReward)
     , goldReward(goldReward)
     , boss(isBoss)
     , elite(isElite)
+    , bossFloor(bossFloor)
+    , phase2Active(false)
 {
 }
 
@@ -18,6 +21,8 @@ const std::string& Monster::getName() const { return name; }
 bool Monster::isAlive() const { return stats.hp > 0; }
 bool Monster::isBoss() const { return boss; }
 bool Monster::isElite() const { return elite; }
+int  Monster::getBossFloor() const { return bossFloor; }
+bool Monster::isPhase2() const { return phase2Active; }
 const Stats& Monster::getStats() const { return stats; }
 int Monster::getExpReward() const { return expReward; }
 int Monster::getGoldReward() const { return goldReward; }
@@ -26,6 +31,24 @@ void Monster::takeDamage(int damage)
 {
     if (damage < 1) damage = 1;
     stats.hp = std::max(0, stats.hp - damage);
+}
+
+void Monster::heal(int amount)
+{
+    if (amount < 1) return;
+    stats.hp = std::min(stats.maxHp, stats.hp + amount);
+}
+
+bool Monster::checkAndActivatePhase2()
+{
+    if (phase2Active || bossFloor != 10) return false;
+    if (stats.hp > stats.maxHp / 2) return false;
+
+    phase2Active = true;
+    name = "던전의 지배자 [각성]";
+    stats.attack  += 10;
+    stats.defense += 4;
+    return true;
 }
 
 void Monster::takeTrueDamage(int damage)
@@ -168,6 +191,6 @@ namespace MonsterFactory
         }
 
         Stats stats{ hp, hp, 0, 0, atk, def, agi };
-        return Monster(name, stats, expR, goldR, true, false);
+        return Monster(name, stats, expR, goldR, true, false, floor);
     }
 }

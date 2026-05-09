@@ -71,7 +71,10 @@ void Game::mainLoop()
     while (player->isAlive() && !dungeon->isComplete())
     {
         UI::clear();
-        UI::printTitle("던전 " + std::to_string(dungeon->getCurrentFloor()) + "층");
+        std::string floorHeader = dungeon->isInfiniteMode()
+            ? "★ 무한 던전 " + std::to_string(dungeon->getCurrentFloor()) + "층 ★"
+            : "던전 " + std::to_string(dungeon->getCurrentFloor()) + "층";
+        UI::printTitle(floorHeader);
         UI::printHpMpBar(player->getStats().hp, player->getStats().maxHp, "HP", UI::Color::Green);
         std::cout << "  ";
         UI::printHpMpBar(player->getStats().mp, player->getStats().maxMp, "MP", UI::Color::Cyan);
@@ -151,9 +154,19 @@ void Game::showInventoryMenu()
         if (choice == static_cast<int>(inventory->size() + 1)) return;
 
         Item* item = inventory->getItem(choice - 1);
-        if (item->getType() != ItemType::Potion)
+        if (item->getType() == ItemType::Weapon || item->getType() == ItemType::Armor)
         {
-            UI::printLine("던전 밖에서 장비는 자동 장착되지 않습니다. 상점에서 장비를 구매하면 즉시 장착됩니다.", UI::Color::Gray);
+            // 인벤토리에서 장비 장착 — 기존 장비는 버림
+            std::unique_ptr<Item> taken = inventory->removeItem(choice - 1);
+            Equipment* eqPtr = static_cast<Equipment*>(taken.release());
+            std::unique_ptr<Equipment> eq(eqPtr);
+            std::string eqName = eq->getName();
+            bool isWeapon = (eq->getType() == ItemType::Weapon);
+            auto old = isWeapon ? player->equipWeapon(std::move(eq))
+                                : player->equipArmor(std::move(eq));
+            UI::printLine(eqName + " 장착 완료!", UI::Color::Green);
+            if (old)
+                UI::printLine("기존 " + old->getName() + "은(는) 버려졌습니다.", UI::Color::Gray);
             UI::pause();
             continue;
         }
@@ -196,7 +209,15 @@ void Game::gameOver(bool victory)
     {
         UI::printTitle("GAME OVER");
         UI::printLine(player->getName() + "의 모험은 여기서 끝났습니다...", UI::Color::Red);
-        UI::printLine("도달 층: " + std::to_string(dungeon->getCurrentFloor()), UI::Color::Gray);
+        if (dungeon->isInfiniteMode())
+        {
+            UI::printLine("무한 던전 최고 층: " + std::to_string(dungeon->getCurrentFloor()) + "층",
+                UI::Color::Yellow);
+        }
+        else
+        {
+            UI::printLine("도달 층: " + std::to_string(dungeon->getCurrentFloor()), UI::Color::Gray);
+        }
     }
     UI::pause();
 }

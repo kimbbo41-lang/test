@@ -24,12 +24,14 @@ public:
     int getCurrentRoom() const;
     int getTotalFloors() const;
     bool isComplete() const;
+    bool isInfiniteMode() const;
 
 private:
     int currentFloor;
     int currentRoom;
     std::vector<Room> floorRooms;
     bool complete;
+    bool infiniteMode;
 
     void generateFloor();
     EventType rollEvent() const;

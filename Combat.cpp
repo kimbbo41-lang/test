@@ -59,6 +59,17 @@ CombatResult CombatEngine::run()
         if (!player.isAlive()) break;
         if (!monster.isAlive()) break;
 
+        // 10층 보스 2페이즈 전환 체크
+        if (monster.checkAndActivatePhase2())
+        {
+            UI::printDivider();
+            UI::printLine("!!!  던전의 지배자가 분노했다!  !!!", UI::Color::Red);
+            UI::printLine("  각성한 힘이 폭발한다! 형태가 변화한다!", UI::Color::Magenta);
+            UI::printLine("  [던전의 지배자 [각성]] 공격력↑  방어력↑", UI::Color::Yellow);
+            UI::printDivider();
+            UI::pause();
+        }
+
         // --- 몬스터 턴 ---
         if (monster.isStunned())
         {
@@ -273,6 +284,17 @@ void CombatEngine::monsterTurn()
 {
     if (!monster.isAlive()) return;
 
+    // 10층 최종 보스: 페이즈별 특수 행동
+    if (monster.getBossFloor() == 10)
+    {
+        int threshold = monster.isPhase2() ? 30 : 25;
+        if (randomInt(1, 100) <= threshold)
+        {
+            bossFinalTurn();
+            return;
+        }
+    }
+
     bool crit = false;
     int dmg = rollDamage(monster.getStats().attack,
         player.getEffectiveDefense(),
@@ -295,23 +317,106 @@ void CombatEngine::tryInflictStatusOnPlayer()
 {
     if (randomInt(1, 100) > Config::ELITE_STATUS_PROC_PERCENT) return;
 
-    int pick = randomInt(1, 3);
+    int pick = randomInt(1, 5);
     switch (pick)
     {
     case 1:
+    case 2:
         player.applyStatus(StatusEffect::Poison, Config::POISON_DURATION, Config::POISON_HP_PERCENT);
         UI::printLine(player.getName() + "은(는) 독에 중독되었다!", UI::Color::Magenta);
         break;
-    case 2:
+    case 3:
+    case 4:
     {
         int burnDmg = currentFloor * Config::BURN_DAMAGE_PER_FLOOR;
         player.applyStatus(StatusEffect::Burn, Config::BURN_DURATION, burnDmg);
         UI::printLine(player.getName() + "은(는) 화상을 입었다!", UI::Color::Red);
         break;
     }
-    case 3:
+    case 5:
         player.applyStatus(StatusEffect::Stun, Config::STUN_DURATION, 0);
         UI::printLine(player.getName() + "은(는) 기절했다!", UI::Color::Yellow);
         break;
+    }
+}
+
+void CombatEngine::bossFinalTurn()
+{
+    if (monster.isPhase2())
+    {
+        // 2페이즈: 절멸의 파동(1/4) / 공포의 포효(1/4) / 강화 일반 공격(2/4)
+        int pick = randomInt(1, 4);
+        if (pick == 1)
+        {
+            // 절멸의 파동: 공격력 × 1.3, 방어 절반 적용, 화상 부여
+            bool crit = false;
+            int baseAtk = static_cast<int>(monster.getStats().attack * 1.3);
+            int dmg = rollDamage(baseAtk, player.getEffectiveDefense() / 2,
+                monster.getStats().agility, crit);
+            player.takeDamage(dmg);
+            std::string waveMsg = monster.getName() + "의 절멸의 파동! " +
+                player.getName() + "은(는) " + std::to_string(dmg) + " 데미지!";
+            if (crit) waveMsg = "크리티컬! " + waveMsg;
+            UI::printLine(waveMsg, UI::Color::Red);
+            int burnDmg = currentFloor * Config::BURN_DAMAGE_PER_FLOOR;
+            player.applyStatus(StatusEffect::Burn, Config::BURN_DURATION, burnDmg);
+            UI::printLine(player.getName() + "은(는) 화상을 입었다!", UI::Color::Red);
+        }
+        else if (pick == 2)
+        {
+            // 공포의 포효: 피해 없음, 1턴 기절
+            UI::printLine(monster.getName() + "의 공포의 포효!", UI::Color::Magenta);
+            UI::printLine("압도적인 공포가 몸을 얼어붙게 만든다!", UI::Color::Magenta);
+            player.applyStatus(StatusEffect::Stun, Config::STUN_DURATION, 0);
+            UI::printLine(player.getName() + "은(는) 공포에 질려 기절했다!", UI::Color::Yellow);
+        }
+        else
+        {
+            // 강화 일반 공격 + 상태이상
+            bool crit = false;
+            int dmg = rollDamage(monster.getStats().attack, player.getEffectiveDefense(),
+                monster.getStats().agility, crit);
+            player.takeDamage(dmg);
+            std::string msg = monster.getName() + "의 공격! " + player.getName() +
+                "은(는) " + std::to_string(dmg) + " 데미지를 입었다.";
+            if (crit) msg = "크리티컬! " + msg;
+            UI::printLine(msg, crit ? UI::Color::Yellow : UI::Color::Red);
+            if (player.isAlive()) tryInflictStatusOnPlayer();
+        }
+    }
+    else
+    {
+        // 1페이즈: 공허의 일격 / 생명 흡수 (각 1/2)
+        int pick = randomInt(1, 2);
+        if (pick == 1)
+        {
+            // 공허의 일격: 공격력 × 1.5, 방어 절반 적용
+            bool crit = false;
+            int baseAtk = static_cast<int>(monster.getStats().attack * 1.5);
+            int dmg = rollDamage(baseAtk, player.getEffectiveDefense() / 2,
+                monster.getStats().agility, crit);
+            player.takeDamage(dmg);
+            std::string strikeMsg = monster.getName() + "의 공허의 일격! " +
+                player.getName() + "은(는) " + std::to_string(dmg) + " 데미지!";
+            if (crit) strikeMsg = "크리티컬! " + strikeMsg;
+            UI::printLine(strikeMsg, UI::Color::Magenta);
+        }
+        else
+        {
+            // 생명 흡수: 공격력 × 1.2, 피해의 50% 회복
+            bool crit = false;
+            int baseAtk = static_cast<int>(monster.getStats().attack * 1.2);
+            int dmg = rollDamage(baseAtk, player.getEffectiveDefense(),
+                monster.getStats().agility, crit);
+            player.takeDamage(dmg);
+            int healAmt = dmg / 2;
+            monster.heal(healAmt);
+            std::string msg = monster.getName() + "의 생명 흡수! " + player.getName() +
+                "에게 " + std::to_string(dmg) + " 데미지.";
+            if (crit) msg = "크리티컬! " + msg;
+            UI::printLine(msg, crit ? UI::Color::Yellow : UI::Color::Magenta);
+            UI::printLine(monster.getName() + "이(가) HP " + std::to_string(healAmt) +
+                " 회복!", UI::Color::Red);
+        }
     }
 }

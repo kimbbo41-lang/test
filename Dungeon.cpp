@@ -10,7 +10,7 @@
 #include <iostream>
 
 Dungeon::Dungeon()
-    : currentFloor(1), currentRoom(0), complete(false)
+    : currentFloor(1), currentRoom(0), complete(false), infiniteMode(false)
 {
     generateFloor();
 }
@@ -19,6 +19,7 @@ int Dungeon::getCurrentFloor() const { return currentFloor; }
 int Dungeon::getCurrentRoom() const { return currentRoom; }
 int Dungeon::getTotalFloors() const { return Config::TOTAL_FLOORS; }
 bool Dungeon::isComplete() const { return complete; }
+bool Dungeon::isInfiniteMode() const { return infiniteMode; }
 
 void Dungeon::generateFloor()
 {
@@ -77,11 +78,6 @@ bool Dungeon::enterNextRoom(Character& player, Inventory& inventory)
 {
     if (currentRoom >= static_cast<int>(floorRooms.size()))
     {
-        if (currentFloor >= Config::TOTAL_FLOORS)
-        {
-            complete = true;
-            return true;
-        }
         ++currentFloor;
         generateFloor();
 
@@ -91,9 +87,21 @@ bool Dungeon::enterNextRoom(Character& player, Inventory& inventory)
         player.clearStatuses();
 
         UI::clear();
-        UI::printTitle(std::to_string(currentFloor) + "층에 도착했습니다!");
-        UI::printLine("보스 처치 보상: HP/MP가 모두 회복되고 상태이상이 해제되었습니다.",
-            UI::Color::Green);
+        if (!infiniteMode && currentFloor > Config::TOTAL_FLOORS)
+        {
+            infiniteMode = true;
+            UI::printTitle("★★★  무한 던전 진입!  ★★★");
+            UI::printLine("던전의 지배자를 쓰러뜨렸다!", UI::Color::Yellow);
+            UI::printLine("그러나 던전의 심연은 끝이 없다...", UI::Color::Magenta);
+            UI::printLine("얼마나 버틸 수 있을지 증명해라!", UI::Color::Red);
+            UI::printLine("HP/MP 완전 회복, 상태이상 해제.", UI::Color::Green);
+        }
+        else
+        {
+            UI::printTitle(std::to_string(currentFloor) + "층에 도착했습니다!");
+            UI::printLine("보스 처치 보상: HP/MP가 모두 회복되고 상태이상이 해제되었습니다.",
+                UI::Color::Green);
+        }
         UI::pause();
     }
 
@@ -302,28 +310,15 @@ void Dungeon::handleShop(Character& player, Inventory& inventory)
             continue;
         }
 
-        if (bought->getType() == ItemType::Weapon || bought->getType() == ItemType::Armor)
+        if (inventory.isFull())
         {
-            Equipment* eqPtr = static_cast<Equipment*>(bought.release());
-            std::unique_ptr<Equipment> eq(eqPtr);
-            auto old = (eq->getType() == ItemType::Weapon)
-                ? player.equipWeapon(std::move(eq))
-                : player.equipArmor(std::move(eq));
-            UI::printLine("장착 완료!", UI::Color::Green);
-            if (old) UI::printLine("기존 " + old->getName() + "은(는) 버려졌습니다.", UI::Color::Gray);
+            UI::printLine("인벤토리가 가득 찼습니다. 구매 취소.", UI::Color::Red);
+            player.gainGold(bought->getPrice());
         }
         else
         {
-            if (inventory.isFull())
-            {
-                UI::printLine("인벤토리가 가득 찼습니다. 구매 취소.", UI::Color::Red);
-                player.gainGold(bought->getPrice());
-            }
-            else
-            {
-                inventory.addItem(std::move(bought));
-                UI::printLine("구매 완료!", UI::Color::Green);
-            }
+            inventory.addItem(std::move(bought));
+            UI::printLine("구매 완료! 인벤토리에서 장착할 수 있습니다.", UI::Color::Green);
         }
         UI::pause();
     }

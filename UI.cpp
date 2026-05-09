@@ -128,4 +128,5 @@ namespace UI
         for (int i = filled; i < BAR_WIDTH; ++i) std::cout << "-";
         std::cout << "] " << current << "/" << max;
     }
+
 }

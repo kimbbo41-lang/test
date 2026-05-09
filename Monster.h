@@ -9,12 +9,14 @@ class Monster
 {
 public:
     Monster(std::string name, Stats stats, int expReward, int goldReward,
-            bool isBoss = false, bool isElite = false);
+            bool isBoss = false, bool isElite = false, int bossFloor = 0);
 
     const std::string& getName() const;
     bool isAlive() const;
     bool isBoss() const;
     bool isElite() const;
+    int  getBossFloor() const;
+    bool isPhase2() const;
 
     const Stats& getStats() const;
     int getExpReward() const;
@@ -22,6 +24,10 @@ public:
 
     void takeDamage(int damage);
     void takeTrueDamage(int damage);   // 방어 무시 (화상 등)
+    void heal(int amount);
+
+    // 10층 보스 2페이즈 전환 — HP 50% 이하 최초 1회. 전환됐으면 true 반환
+    bool checkAndActivatePhase2();
 
     // 상태이상
     void applyStatus(StatusEffect effect, int duration, int magnitude);
@@ -37,6 +43,8 @@ private:
     int goldReward;
     bool boss;
     bool elite;
+    int  bossFloor;
+    bool phase2Active;
     std::vector<StatusInstance> statuses;
 };
 
